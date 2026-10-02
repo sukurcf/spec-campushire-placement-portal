@@ -1,42 +1,45 @@
 # CampusHire placement portal
 
-CampusHire is a full-stack Django and React project for a college Training and Placement Office.
+CampusHire specifies a Python Django REST backend for a college Training and Placement Office. Students demonstrate it with Python tests or an API client; no student-built frontend is in scope, including optional work. This repository contains specifications, not application code.
 
 ## Quick facts
 
 | Item | Value |
 |---|---|
-| Track | Web Development — Full Stack |
+| Track | Python — Backend Web Development and DevOps |
 | Difficulty | ★★★★☆ Upper-intermediate |
 | Duration | 6 weeks, about 180 hours |
-| Target job roles | Full Stack Developer, Django Developer, Frontend Developer |
-| Key skills | Django, DRF, PostgreSQL, React, TypeScript, REST, CSRF, Docker, CI |
-| Prerequisites | Basic Python, basic SQL, Git basics, HTML and CSS basics |
+| Target job roles | Python Backend Developer, Django Developer, API Developer |
+| Key skills | Django, DRF, PostgreSQL, SQL, REST, sessions, CSRF, Docker, CI |
+| Prerequisites | Basic Python, basic SQL, Git basics, willingness to learn HTTP |
 | Minimum hardware | 8 GB RAM laptop using the lite profile |
 | Student repository name | `campushire` |
 
 ## What you will build
 
-- A same-site React SPA with role-based routes for students, recruiters, TPO staff, and admins.
+- Role-protected REST operations for students, recruiters, TPO staff, and admins.
 - Student registration restricted to `sitm.example.in`.
 - Student profiles with academics, skills, links, TPO verification, and safe PDF resume upload.
 - Recruiter company profiles and job postings with TPO approval.
 - An eligibility engine that shows all reason codes before a student applies.
 - An application pipeline with timeline events and authorized resume download.
 - Student job search with filters, pagination, sorting, and eligibility-only mode.
-- A TPO dashboard with placement metrics and SQL query-plan evidence.
-- Backend, frontend, API, and Playwright tests with coverage gates.
+- TPO JSON/CSV reporting endpoints with placement metrics and SQL query-plan evidence.
+- At least 55 meaningful Python tests, including API integration flows and local lifecycle acceptance.
+
+Local startup, stop, seed data, loopback ports, and offline-after-download verification are specified in [06 Tech stack and setup](docs/06-tech-stack-and-setup.md). Django admin is a built-in local master-data tool, not a student-built business interface. No public deployment or paid account is required.
 
 ## Architecture at a glance
 
 ```mermaid
 flowchart LR
-    U["Student, Recruiter, TPO, Admin"] --> SPA["React 19 TypeScript SPA"]
-    SPA --> API["Django 5.2 and DRF API"]
+    U["Student, Recruiter, TPO"] --> Client["Python tests or API client"]
+    Client --> API["Django 5.2 and DRF API on loopback"]
     API --> DB["PostgreSQL 18"]
     API --> MEDIA["Private resume media"]
     API --> MAIL["Mailpit for optional e-mail"]
-    API --> ADMIN["Django admin"]
+    Admin["System Admin"] --> ADMIN["Built-in local Django admin"]
+    ADMIN --> DB
 ```
 
 ## How to read this specification
@@ -54,7 +57,7 @@ Read documents 01 to 04 first. Then read the architecture, setup, data model, AP
 | [05 System architecture](docs/05-system-architecture.md) | Components, flows, deployment view, repository tree, and ADRs. |
 | [06 Tech stack and setup](docs/06-tech-stack-and-setup.md) | Versions, tools, local setup, hardware profiles, and learning order. |
 | [07 Data model](docs/07-data-model.md) | Entities, relationships, indexes, enumerations, and sample data. |
-| [08 API specification](docs/08-api-specification.md) | REST endpoints, request and response examples, and UI routes. |
+| [08 API specification](docs/08-api-specification.md) | REST endpoints, request and response examples, and JSON/CSV reports. |
 | [09 Testing strategy and test cases](docs/09-testing-strategy-and-test-cases.md) | Test strategy, coverage, catalog, and traceability. |
 | [10 DevOps, CI/CD, and quality](docs/10-devops-ci-cd-and-quality.md) | Git workflow, quality gates, Docker, CI, config, and DoD. |
 | [11 Milestones and deliverables](docs/11-milestones-and-deliverables.md) | Six-week plan, effort budget, Gantt chart, and demo script. |
@@ -97,4 +100,4 @@ Every Friday, show a 15-minute demo to the trainer. Show the latest merged featu
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-10-02 | First release |
-
+| 1.1 | 2026-10-02 | Backend-only revision: frontend and public deployment deliverables removed. Their effort and points now assess Python, SQL, API contracts, tests, and reproducible local operations; six weeks and rubric weights are unchanged. |

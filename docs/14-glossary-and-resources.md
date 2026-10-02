@@ -43,15 +43,17 @@ Purpose: This document defines CampusHire terms and lists official documentation
 | PPO | Pre-placement offer, usually linked to an internship. |
 | CSRF | Cross-Site Request Forgery, prevented by Django token checks on unsafe methods. |
 | Session authentication | Server-side login state stored in Django and referenced by a secure cookie. |
-| Same-site SPA | A React single-page app served under the same site as the API. |
+| API client | A cookie-aware tool or Python test that sends HTTP requests and inspects responses. |
 | Private media | Uploaded files stored outside public static paths. |
-| Dashboard | TPO view for student counts, placed percentage, accepted full-time offers, and CTC metrics. |
-| Median CTC | The middle accepted full-time CTC value after sorting. |
+| Placement report | TPO REST endpoint returning student counts, placed percentage, accepted full-time offers, and CTC metrics as JSON or CSV. |
+| Median CTC | The middle accepted full-time CTC after sorting, or the mean of the middle two values for an even count. |
 | Window function | A SQL function that ranks or calculates across related rows without collapsing them. |
 | Query plan | PostgreSQL output that explains how a query reads and joins data. |
-| Route guard | Frontend logic that blocks a role from opening another role's route. |
-| Typed API client | TypeScript fetch wrapper with typed request and response shapes. |
-| Playwright journey | A browser test that checks a full CampusHire user workflow. |
+| Object permission | Server-side check that a role owns or is authorized to access a particular resource. |
+| API integration flow | Python test of a multi-request business workflow against real database-backed endpoints. |
+| Local fixture | Recorded fictional seed/PDF input that requires no external network during runtime tests. |
+| Named volume | Persistent local Docker storage retained through normal stop/start. |
+| Confirmed reset | A separate command that deletes only project-local data after explicit confirmation. |
 
 ## Official documentation links
 
@@ -81,52 +83,34 @@ The links below were checked on 2 October 2026 with HTTP header requests. Use of
 | Docker Engine | <https://docs.docker.com/engine/> |
 | Docker Compose | <https://docs.docker.com/compose/> |
 | Mailpit | <https://mailpit.axllent.org/> |
-| Node.js | <https://nodejs.org/en/learn> |
-| React | <https://react.dev/> |
-| TypeScript | <https://www.typescriptlang.org/docs/> |
-| Vite | <https://vite.dev/guide/> |
-| React Router | <https://reactrouter.com/> |
-| React Hook Form | <https://react-hook-form.com/> |
-| Tailwind CSS | <https://tailwindcss.com/docs> |
-| TanStack Query | <https://tanstack.com/query/latest> |
-| Zod | <https://zod.dev/> |
-| Recharts | <https://recharts.org> |
-| Vitest | <https://vitest.dev/> |
-| React Testing Library | <https://testing-library.com/docs/react-testing-library/intro/> |
-| MSW | <https://mswjs.io/docs/> |
-| Playwright | <https://playwright.dev/> |
-| @axe-core/playwright | <https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright> |
-| ESLint | <https://eslint.org/docs/latest/> |
-| Prettier | <https://prettier.io/docs/> |
 
 ## Free learning resources
 
 | Topic | Resource | Why to read it |
 |---|---|---|
-| Django basics | <https://docs.djangoproject.com/en/5.2/intro/> | Build models, views, admin, sessions, and forms. |
+| Django basics | <https://docs.djangoproject.com/en/5.2/intro/> | Build models, views, built-in admin, and sessions. |
 | DRF tutorial | <https://www.django-rest-framework.org/tutorial/quickstart/> | Understand serializers, viewsets, and permissions. |
 | PostgreSQL tutorial | <https://www.postgresql.org/docs/current/tutorial.html> | Revise SQL queries, joins, and aggregates. |
-| PostgreSQL indexes | <https://www.postgresql.org/docs/current/indexes.html> | Learn why job search and dashboard filters need indexes. |
-| React learn | <https://react.dev/learn> | Learn components, props, state, hooks, and effects. |
-| TypeScript handbook | <https://www.typescriptlang.org/docs/handbook/intro.html> | Learn types, interfaces, generics, and narrowing. |
-| Vite guide | <https://vite.dev/guide/> | Understand local frontend development and builds. |
+| PostgreSQL indexes | <https://www.postgresql.org/docs/current/indexes.html> | Learn why job search and report filters need indexes. |
+| Python standard library | <https://docs.python.org/3/> | Revise Decimal, datetime, CSV, JSON, exceptions, and context managers. |
 | MDN HTTP | <https://developer.mozilla.org/en-US/docs/Web/HTTP> | Revise methods, headers, cookies, and status codes. |
 | OWASP file upload | <https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html> | Understand PDF upload risks and controls. |
 | OWASP CSRF | <https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html> | Understand why unsafe methods need tokens. |
-| Playwright docs | <https://playwright.dev/docs/intro> | Build the four required browser journeys. |
+| Python test fixtures | <https://docs.pytest.org/> | Build API flows, controlled-clock tests, and local lifecycle verification. |
 | GitHub Actions docs | <https://docs.github.com/actions> | Understand CI jobs, triggers, and logs. |
 | GitHub Flow | <https://docs.github.com/get-started/using-github/github-flow> | Learn branch and PR workflow. |
 | Conventional Commits | <https://www.conventionalcommits.org/en/v1.0.0/> | Write searchable commit messages. |
-| Docker getting started | <https://docs.docker.com/get-started/> | Run PostgreSQL, Django, and React consistently. |
+| Docker getting started | <https://docs.docker.com/get-started/> | Run PostgreSQL/Django locally, retain named volumes, and inspect readiness. |
 
 ## Suggested reading order
 
 1. Read the README and documents 01 to 04 to understand scope, roles, FRs, BRs, and NFRs.
 2. Read documents 05, 07, and 08 before creating models or APIs.
 3. Read this document's Django, DRF, and PostgreSQL links during week 1.
-4. Read the React, TypeScript, Vite, React Router, and React Hook Form links before building forms.
-5. Read the CSRF, XSS, and file upload resources before implementing login or resume upload.
+4. Read the Python, API permission, and SQL resources before implementing serializers, services, and reports.
+5. Read the CSRF and file upload resources before implementing login or resume upload.
 6. Read the testing resources before week 3 ends.
 7. Read documents 10, 11, 12, and 13 before final hardening and interview preparation.
+8. Follow document 06's local operation contract and document 09's local cases before claiming reproducibility.
 
 [Back to README](../README.md)

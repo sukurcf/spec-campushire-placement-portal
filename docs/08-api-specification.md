@@ -1,10 +1,10 @@
 # API specification
 
-Purpose: This document defines the CampusHire REST API and the React SPA screens and routes.
+Purpose: This document defines the CampusHire REST contracts, permissions, JSON/CSV reports, and API-client integration flows.
 
-## Part 1: REST API
+## REST API
 
-The API base path is `/api/`. Responses use JSON except resume downloads. Authenticated endpoints use Django session authentication. Unsafe methods MUST include `X-CSRFToken`. In endpoint tables, role `TPO` also allows `ADMIN` unless the row explicitly says otherwise.
+The API base path is `/api/`. Responses use JSON except authorized PDF downloads and CSV reports. Local clients call `http://127.0.0.1:8000` directly; no custom business interface is implemented. Authenticated endpoints use Django session authentication. Unsafe methods MUST include `X-CSRFToken`. In endpoint tables, role `TPO` also allows `ADMIN` unless the row explicitly says otherwise.
 
 ### Shared rules
 
@@ -20,7 +20,7 @@ The API base path is `/api/`. Responses use JSON except resume downloads. Authen
 | Maximum page size | 50 |
 | Timestamp format | ISO 8601 with offset, for example `2026-11-20T17:00:00+05:30` |
 
-Protected endpoints return `403 authentication-required` when a session is missing or expired. The SPA MUST redirect to `/login` only for that key. It MUST keep the normal forbidden-page behavior for other `403` keys.
+Protected endpoints return `403 authentication-required` when a session is missing or expired. Wrong roles return `403 role-not-allowed`; object-ownership failures keep their specific keys. These responses contain no redirects or `Location` header. Session/CSRF clients retain cookies and reread the CSRF cookie after login because Django rotates it.
 
 ### Error format
 
@@ -54,6 +54,9 @@ List endpoints return this shape.
 
 | Method | Path | Roles | Purpose | Main statuses |
 |---|---|---|---|---|
+| GET | /health/live/ | Anonymous | Process liveness | 200 |
+| GET | /health/ready/ | Anonymous | Local DB and private-media readiness | 200, 503 |
+| GET | /api/schema/ | Anonymous | OpenAPI contract without credentials | 200 |
 | GET | /api/csrf/ | Anonymous | Set CSRF cookie | 204 |
 | GET | /api/session/ | Anonymous | Read current session | 200 |
 | POST | /api/auth/student-register/ | Anonymous | Register student | 201, 400 |
@@ -89,15 +92,20 @@ List endpoints return this shape.
 | GET | /api/tpo/postings/ | TPO | Posting approval queue | 200 |
 | POST | /api/tpo/postings/{posting_id}/approve/ | TPO | Approve posting | 200, 409 |
 | POST | /api/tpo/postings/{posting_id}/reject/ | TPO | Reject posting | 200, 400 |
-| GET | /api/tpo/dashboard/summary/ | TPO | Dashboard metrics | 200, 503 |
-| GET | /api/tpo/dashboard/branch-report/ | TPO | Branch placement report | 200, 503 |
-| GET | /api/tpo/dashboard/company-report/ | TPO | Company offers report | 200 |
+| GET | /api/tpo/reports/summary/ | TPO | Placement metrics as JSON or CSV | 200, 400, 503 |
+| GET | /api/tpo/reports/branch-report/ | TPO | Branch placement rows as JSON or CSV | 200, 400, 503 |
+| GET | /api/tpo/reports/company-report/ | TPO | Company offers as JSON or CSV | 200, 400, 503 |
+| GET | /api/tpo/postings/{posting_id}/applications/ | TPO | Should applicant JSON/CSV export with branch/CGPA filters | 200, 400, 404 |
 | GET | /api/master/branches/ | Authenticated | Active branches | 200 |
 | GET | /api/master/skills/ | Authenticated | Active skills | 200 |
 | GET | /api/notifications/ | Authenticated | Should notifications | 200 |
 | PATCH | /api/notifications/{notification_id}/read/ | Authenticated | Mark notification read | 200 |
 
 ### Authentication endpoints
+
+`GET /health/live/` and `GET /health/ready/` use the exact status/body contracts in document 06. They reveal no credentials, SQL errors, storage paths, or personal data. A protected operation encountering unavailable PostgreSQL returns `503 database-unavailable` in the standard error envelope. Resume storage failure returns `503 resume-storage-unavailable` and retains the old current resume.
+
+`GET /api/schema/` returns the generated OpenAPI document. It describes all Must request/response schemas, role requirements, pagination, decimal strings, JSON/CSV representations, and error keys. Python contract tests check recorded requests/responses against it.
 
 #### GET /api/csrf/
 
@@ -172,7 +180,7 @@ Errors: 400 company-name-required; 400 password-too-short.
 
 #### POST /api/auth/login/
 
-Request fields: `email`, `password`.
+Request fields: `email`, `password`. Explicit CSRF protection is required even for an anonymous request. Retain the returned session and newly rotated CSRF cookie.
 
 Success response `200` for an approved recruiter:
 
@@ -194,7 +202,7 @@ Pending recruiter login also returns `200`:
 }
 ```
 
-Errors: 400 invalid-credentials; 403 recruiter-rejected.
+Errors: 400 invalid-credentials; 403 recruiter-rejected with `error.details.approval_reason`; 403 csrf-failed.
 
 #### POST /api/auth/logout/
 
@@ -217,7 +225,7 @@ Returns the current student profile.
   "active_backlogs": 0,
   "tenth_percentage": "91.20",
   "twelfth_percentage": "88.40",
-  "skills": ["Python", "React"],
+  "skills": ["Python", "SQL"],
   "links": {"github": "https://github.com/aarav-example"},
   "verification_status": "VERIFIED",
   "profile_completeness_percent": 100,
@@ -240,7 +248,7 @@ Request example:
   "active_backlogs": 0,
   "tenth_percentage": "91.20",
   "twelfth_percentage": "88.40",
-  "skills": ["Python", "React", "SQL"],
+  "skills": ["Python", "SQL", "Docker"],
   "phone": "+919876543210"
 }
 ```
@@ -344,6 +352,8 @@ Returns detail for a published posting.
 #### GET /api/jobs/{posting_id}/eligibility/
 
 Returns all failing eligibility reasons in fixed order.
+
+For eligible seeded Aarav and Navira, the exact response is `{"label":"Eligible","reason_ids":[],"messages":[]}`. The arrays align by index; a client must not discard later failure reasons. The local UUID/clock/fixtures are defined in document 06.
 
 ```json
 {
@@ -478,6 +488,8 @@ Success:
 
 #### GET /api/recruiter/postings/{posting_id}/applications/
 
+The Should `?format=csv` representation preserves the JSON list's branch and `min_cgpa` filters and ownership checks. CSV headers are `application_id,student_name,branch,cgpa,current_state,applied_at`; rows sort by `applied_at,application_id`. It exports the complete filtered set, not only the current page, and never includes storage keys or resume bytes. The Should TPO applicant endpoint uses the same columns/filters, permits TPO/ADMIN only, and can read any posting.
+
 Filters: `branch`, `min_cgpa`, `state`, `page`, `page_size`.
 
 ```json
@@ -585,25 +597,29 @@ Errors: `400 reason-required`.
 
 Errors: 400 reason-required; 409 deadline-passed.
 
-#### Dashboard
+#### Placement reporting endpoints
 
-Dashboard definitions:
+FR-TPO-01 / BR-24 / BR-25 definitions:
 
 - Placed student means a distinct student with an `ACCEPTED` application for a `FULL_TIME` posting.
 - Placed percentage is placed students divided by registered students, multiplied by 100, and rounded to 2 decimals.
 - Placed percentage is `0.00` when no students are registered.
 - `accepted_offer_count` is the number of accepted full-time applications.
 - Highest, average, and median CTC use accepted applications' `offer_ctc_lpa`.
+- Only `current_state=ACCEPTED` joined to `posting_type=FULL_TIME` contributes offers or CTC. Internship and internship-with-PPO amounts are excluded.
 - Median for an even count is the mean of the two middle CTC values.
 - Branch rows include registered students, placed students, and placed percentage.
 - Company ranking uses dense rank on accepted full-time offers inside each branch.
+- Registered/verified/placed counts use distinct student IDs, never counts inflated by joins or multiple accepted offers.
+- Percentages and non-empty CTC values are decimal strings rounded to two places using decimal arithmetic. Empty CTC aggregates are JSON `null`, never salary zero.
 
-`GET /api/tpo/dashboard/summary/` returns:
+`GET /api/tpo/reports/summary/` returns:
 
 ```json
 {
   "registered_students": 100,
   "verified_students": 72,
+  "placed_students": 18,
   "placed_percentage": "18.00",
   "accepted_offer_count": 21,
   "highest_ctc_lpa": "10.00",
@@ -612,9 +628,9 @@ Dashboard definitions:
 }
 ```
 
-When no accepted full-time offers exist, the CTC fields return `"No offers yet"`.
+When no accepted full-time offers exist, CTC fields are `null`, `accepted_offer_count=0`, and `placed_students=0`. With zero registered students, `placed_percentage="0.00"`. These are data semantics, not display labels.
 
-`GET /api/tpo/dashboard/branch-report/` returns branch rows with a company rank from handwritten SQL.
+`GET /api/tpo/reports/branch-report/` returns branch/company rows with a company rank from handwritten SQL. Optional `branch=CSE` filters before aggregation. Branch registered/placed metrics are distinct counts within that branch; they are repeated on each company row and must not be summed across company rows. Companies with tied accepted offer counts share a dense rank.
 
 ```json
 {
@@ -632,7 +648,41 @@ When no accepted full-time offers exist, the CTC fields return `"No offers yet"`
 }
 ```
 
-`GET /api/tpo/dashboard/company-report/` returns company-wise offers. Errors: `503 report-timeout`.
+`GET /api/tpo/reports/company-report/` returns company-wise accepted full-time offers and distinct placed students:
+
+```json
+{
+  "rows": [
+    {
+      "company": "Navira Systems Pvt Ltd",
+      "accepted_offer_count": 7,
+      "placed_students": 6,
+      "highest_ctc_lpa": "10.00",
+      "average_ctc_lpa": "8.00",
+      "median_ctc_lpa": "8.00"
+    }
+  ]
+}
+```
+
+All three endpoints MUST return JSON by default (`application/json`) and support `?format=csv` (`text/csv; charset=utf-8`). They use identical filters, permissions, aggregate definitions, and decimal precision in both formats. CSV has UTF-8 headers, standard quoting, LF record endings, and empty cells for JSON `null`. Responses include an attachment filename: `placement-summary.csv`, `branch-placement.csv`, or `company-offers.csv`.
+
+| Endpoint suffix | Exact CSV header | Stable row order |
+|---|---|---|
+| `summary/` | `registered_students,verified_students,placed_students,placed_percentage,accepted_offer_count,highest_ctc_lpa,average_ctc_lpa,median_ctc_lpa` | Exactly one aggregate row, including an empty dataset |
+| `branch-report/` | `branch,registered_students,placed_students,placed_percentage,company,company_offer_count,company_rank_in_branch` | Branch code ascending, rank ascending, company name ascending |
+| `company-report/` | `company,accepted_offer_count,placed_students,highest_ctc_lpa,average_ctc_lpa,median_ctc_lpa` | Accepted offer count descending, company name ascending |
+
+A registered branch with zero accepted full-time offers has one branch row with `company=null`, `company_offer_count=0`, and `company_rank_in_branch=null`; no registered students yields no branch rows. A company with zero accepted offers is omitted; no accepted offers yields `rows=[]` and a header-only company CSV. Unsupported formats return `400 invalid-report-format`, invalid branch filters return `400 branch-invalid`, unauthorized roles return `403 role-not-allowed`, and report timeouts return `503 report-timeout` without partial CSV data.
+
+For the four-student fixture with accepted CTC `6.00,8.00,10.00,12.00`, the summary CSV is exactly:
+
+```text
+registered_students,verified_students,placed_students,placed_percentage,accepted_offer_count,highest_ctc_lpa,average_ctc_lpa,median_ctc_lpa
+4,4,4,100.00,4,12.00,9.00,9.00
+```
+
+Document 09 tests even/odd medians, multiple accepted offers for one student, internship exclusion, zero denominators, ranking ties, and JSON/CSV equivalence.
 
 ### Master and notification endpoints
 
@@ -646,70 +696,19 @@ When no accepted full-time offers exist, the CTC fields return `"No offers yet"`
 
 `GET /api/notifications/` is a Should endpoint. It returns unread and recent read notifications with a `dedup_key` hidden from normal users.
 
-## Part 2: UI screens and routes
+## API-client integration flows
 
-The SPA uses React Router. It MUST show loading, empty, and error states. It MUST not render raw HTML from recruiter posting descriptions. The Vite development server proxies `/api` and `/admin` to Django at `http://localhost:8000`, so the browser uses one origin, `http://localhost:5173`. Session cookies and CSRF work without CORS. In the production-like profile, Nginx serves the SPA and proxies `/api`.
+Python tests or an API client MUST use the contracts above without a custom interface. Django admin at `/admin/` is a built-in local tool for master data/staff accounts only; it is not a mandatory business interface.
 
-### Route summary
+| Flow | Exact requests | Expected evidence |
+|---|---|---|
+| Session lifecycle | GET CSRF; POST login with token; GET session; POST logout with rotated token; GET own applications with old cookie | Login `200`; logout `204`; final request `403 authentication-required`, no redirect |
+| Student applies | PATCH profile; POST PDF; submit; TPO verifies in its own session; student GET eligibility; POST apply | `VERIFIED`; ordered eligibility arrays; apply `201 APPLIED`; one event |
+| Recruiter reviews | GET own applicants with `branch=CSE&min_cgpa=8.00`; GET authorized PDF; PATCH one status | Filtered own data only; `application/pdf`; `SHORTLISTED` event with recruiter actor |
+| TPO reports | GET each `/api/tpo/reports/` endpoint as JSON, then `?format=csv` | Equal aggregates, exact CSV headers, SQL rank/query-plan evidence |
 
-| Route | Role | Purpose | Main fields | Actions | States and guards |
-|---|---|---|---|---|---|
-| `/login` | Anonymous | Login | E-mail, password | Login | Shows `invalid-credentials`; redirects by role after login |
-| `/register/student` | Anonymous | Student registration | Name, college e-mail, password | Register | Rejects non-`sitm.example.in` e-mail |
-| `/register/recruiter` | Anonymous | Recruiter registration | Name, e-mail, designation, company, password | Register | Shows pending approval after success |
-| `/student/dashboard` | Student | Student landing page | Profile status, applications, notifications | Continue profile, view jobs | Guard blocks non-students |
-| `/student/profile` | Student | Edit profile | Required fields from BR-06, skills, links | Save, submit | Field validation; loading saved profile; error banner on 400 |
-| `/student/resume` | Student | Upload resume | PDF file | Upload | Shows `resume-not-pdf`, `resume-too-large`; success shows file name |
-| `/student/jobs` | Student | Search jobs | Keyword, type, location, min CTC, eligible-only, sort | Search, paginate | Empty state says `No matching jobs found` |
-| `/student/jobs/:postingId` | Student | Job detail and eligibility | Posting fields, rounds, eligibility reasons | Apply | Apply disabled for every eligibility reason |
-| `/student/applications` | Student | Own applications | Posting, company, state, dates | View timeline, withdraw | Empty state for no applications |
-| `/student/applications/:applicationId` | Student | Timeline | Events, actor, timestamp, reason | Accept, decline, withdraw when allowed | Guard checks owner |
-| `/recruiter/pending` | Recruiter | Approval waiting page | Approval status and reason | Logout | Approved recruiters redirect to company page |
-| `/recruiter/company` | Recruiter | Company profile | Name, website, industry, headquarters, description | Save | Guard requires `APPROVED` |
-| `/recruiter/postings` | Recruiter | Posting list | Title, type, state, deadline | Create, edit, submit | Empty state guides first posting |
-| `/recruiter/postings/new` | Recruiter | Create posting | Posting fields and rounds | Save draft | Validates compensation by type |
-| `/recruiter/postings/:postingId` | Recruiter | Edit own posting | Draft fields, rejection reason | Save, submit | Non-owner shows access denied |
-| `/recruiter/postings/:postingId/applicants` | Recruiter | Applicant list | Branch, CGPA, state filters | Download resume, update state | Shows 403 page for other company |
-| `/tpo/dashboard` | TPO | Metrics and reports | Counts, CTC, branch and company tables | Refresh, export Should | Report timeout shows panel error |
-| `/tpo/recruiters` | TPO | Recruiter approvals | Recruiter, company, status | Approve, reject | Rejection reason required |
-| `/tpo/students` | TPO | Profile verification | Student, branch, status | Verify, reject | Missing profile values highlighted |
-| `/tpo/postings` | TPO | Posting approvals | Posting, company, deadline | Approve, reject | Reject reason 10-500 chars |
-| `/admin-help` | Admin | Django admin guidance | Admin URL and master data list | Open admin | Explains admin is server-rendered |
+For a missing session, the client must authenticate again before retrying unsafe requests; it must not retry a write blindly. For `recruiter-pending-approval`, the client may read session/approval state but cannot use recruiter feature endpoints. Validation and ownership errors retain their documented keys and leave persisted data unchanged.
 
-### Form validation messages
-
-| Field | Route | Invalid input | Message |
-|---|---|---|---|
-| Student e-mail | `/register/student` | `aarav.rao@gmail.com` | Use your `sitm.example.in` college e-mail address. |
-| Password | Registration and login | 11 characters | Password must be at least 12 characters. |
-| CGPA | `/student/profile` | `10.50` | CGPA must be from 0.00 to 10.00. |
-| Graduation year | `/student/profile` | `2035` | Graduation year must be from 2026 to 2030. |
-| Resume | `/student/resume` | Plain text named `.pdf` | Upload a real PDF file. |
-| Resume size | `/student/resume` | 2,100,000 bytes | Resume must be 2 MB or smaller. |
-| Stipend | Posting form | Internship with blank stipend | Stipend is required for internship postings. |
-| Rejection reason | TPO reject dialogs | `Bad` | Reason must be 10 to 500 characters. |
-| Page size | Jobs URL | `page_size=100` | Page size must be between 1 and 50. |
-
-### UI state requirements
-
-| Screen group | Loading state | Empty state | Error state |
-|---|---|---|---|
-| Student jobs | Skeleton cards for search results | `No matching jobs found` | Shows API error and keeps filters |
-| Profile | Disabled Save button and spinner | Not applicable | Field errors remain beside inputs |
-| Resume | Progress text `Uploading resume` | `No current resume uploaded` | Shows exact upload error message |
-| Recruiter applicants | Table skeleton | `No applicants match these filters` | 403 page for other-company posting |
-| TPO dashboard | Panel-level spinners | `No offers yet` for CTC metrics | Failed panel shows retry button |
-| Approval queues | Row skeletons | `No pending approvals` | Error banner with request ID |
-
-### Route guard rules
-
-| Guard | Exact behavior |
-|---|---|
-| Anonymous-only | Logged-in users redirect to their dashboard. |
-| Authenticated | Anonymous users redirect to `/login` and return after login. |
-| Student | Non-students see `You do not have access to this page`. |
-| Recruiter approved | Pending recruiters go to `/recruiter/pending`; rejected recruiters see the TPO reason. |
-| TPO | `TPO` and `ADMIN` sessions can open TPO routes. Other roles see `You do not have access to this page`. |
-| Application owner | Students cannot open another student's application detail. |
+The local operation and exact fixture demo in document 06, four Must Python/API flows in document 09, and local acceptance tests are the integration deliverables. API responses and test reports replace screen captures.
 
 [Back to README](../README.md)

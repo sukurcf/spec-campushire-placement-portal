@@ -8,16 +8,16 @@ Purpose: This document defines CampusHire users, permissions, journeys, and user
 |---|---|---|
 | Student | A final-year or pre-final-year student who maintains a profile and applies to postings. | Self-registers with `@sitm.example.in`. |
 | Recruiter | A company HR user who manages company data and reviews applicants. | Registers, then waits for TPO approval. |
-| Placement Officer | TPO staff member who verifies profiles, approves postings, and reads dashboards. | Created by System Admin. |
+| Placement Officer | TPO staff member who verifies profiles, approves postings, and reads REST reports. | Created by System Admin. |
 | System Admin | Django admin user who manages settings, branches, skills, and TPO accounts. | Created through Django superuser flow. |
 
 ## Personas
 
 | Persona | Role | Goals | Pain points | Technical comfort |
 |---|---|---|---|---|
-| Aarav Rao | Student, CSE 2027 | Apply before deadlines and understand eligibility. | Does not know why Google Forms reject him. | Comfortable with mobile web forms. |
-| Meera Nair | Placement Officer | Verify student profiles and publish approved drives. | Tracks CGPA corrections across many sheets. | Comfortable with admin panels and exports. |
-| Rohan Bedi | Recruiter at Navira Systems | Collect eligible applicants for a Bengaluru role. | Receives mixed resumes from many branches. | Comfortable with applicant filters. |
+| Aarav Rao | Student, CSE 2027 | Apply before deadlines and understand eligibility. | Does not know why Google Forms reject him. | Can submit requests using an API client. |
+| Meera Nair | Placement Officer | Verify student profiles and publish approved drives. | Tracks CGPA corrections across many sheets. | Can inspect JSON responses and CSV exports. |
+| Rohan Bedi | Recruiter at Navira Systems | Collect eligible applicants for a Bengaluru role. | Receives mixed resumes from many branches. | Can use applicant query parameters. |
 | Kavya Menon | System Admin | Keep college settings accurate. | Wants minimal data fixes during drives. | Comfortable with Django admin. |
 
 ## Permission matrix
@@ -40,7 +40,7 @@ Purpose: This document defines CampusHire users, permissions, journeys, and user
 | Apply to posting | Yes | No | No | No |
 | Withdraw application before shortlist | Yes | No | No | No |
 | Update application status | No | One application at a time | No | No |
-| View TPO dashboard | No | No | Yes | Yes |
+| Read TPO JSON/CSV reports | No | No | Yes | Yes |
 | Manage branches and skills | No | No | No | Yes |
 
 ## Key user journeys
@@ -49,12 +49,12 @@ Purpose: This document defines CampusHire users, permissions, journeys, and user
 
 ```mermaid
 flowchart TD
-    A["Aarav logs in"] --> B["Completes profile and uploads PDF resume"]
+    A["Aarav creates an API session with CSRF"] --> B["PATCH profile and POST PDF resume"]
     B --> C["TPO verifies profile"]
-    C --> D["Aarav opens PUBLISHED posting"]
+    C --> D["GET PUBLISHED posting"]
     D --> E["Eligibility engine checks all rules"]
-    E --> F["Portal shows Eligible"]
-    F --> G["Aarav clicks Apply"]
+    E --> F["JSON returns Eligible and no reasons"]
+    F --> G["POST application with session and CSRF"]
     G --> H["Application is APPLIED with timestamp"]
 ```
 
@@ -75,10 +75,10 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Meera opens dashboard"] --> B["System counts registered and verified students"]
+    A["Meera requests TPO REST reports"] --> B["System counts registered and verified students"]
     B --> C["System calculates accepted offer and placed metrics"]
     C --> D["SQL report ranks companies by branch offers"]
-    D --> E["Meera checks highest, average, and median CTC"]
+    D --> E["Meera checks highest, average, and median CTC in JSON or CSV"]
 ```
 
 ## User stories
@@ -96,22 +96,26 @@ flowchart TD
 | US-09 | As a recruiter, I want to filter applicants and download authorized resumes, so that I review only my own posting data. | Must | FR-REC-01 |
 | US-10 | As a student, I want to search jobs by keyword, type, location, CTC, and eligibility, so that I find relevant postings. | Must | FR-JOB-01 |
 | US-11 | As a placement officer, I want placement metrics and branch-wise reports, so that I can brief college leadership. | Must | FR-TPO-01 |
-| US-12 | As a user, I want a responsive role-based React SPA, so that each role sees only useful routes. | Must | FR-UI-01 |
+| US-12 | As an API user, I want server-side role and ownership checks with stable errors, so that requests cannot expose another role's data. | Must | FR-API-01 |
 | US-13 | As a system admin, I want to manage branches, skills, and college settings, so that master data is accurate. | Must | FR-ADMIN-01 |
 | US-14 | As a placement officer, I want dream-offer rules, so that high offers do not block valid higher opportunities. | Should | FR-POLICY-01 |
 | US-15 | As a recruiter, I want bulk status changes after shortlisting, so that I can process a campus drive faster. | Should | FR-REC-02 |
 | US-16 | As a student, I want notifications and reminders, so that I do not miss deadlines and offer actions. | Should | FR-NOTIF-01, FR-OFFER-01 |
-| US-17 | As a placement officer, I want audit logs, charts, and CSV exports, so that decisions are traceable. | Should | FR-AUDIT-01, FR-REPORT-01 |
-| US-18 | As a student, I want optional schedule invites, dark mode, and resume keywords, so that the portal is more convenient. | Could | FR-SCHED-01, FR-THEME-01, FR-RESUME-02 |
+| US-17 | As a placement officer, I want audit records and filtered applicant CSV exports, so that decisions are traceable. | Should | FR-AUDIT-01, FR-REPORT-01 |
+| US-18 | As a student, I want optional schedule invites and resume keywords through API responses, so that placement preparation is easier. | Could | FR-SCHED-01, FR-RESUME-02 |
+| US-19 | As a trainer, I want one local start/stop contract with fictional fixtures, so that I can verify the backend offline after downloads and retain data across restarts. | Must | FR-LOCAL-01 |
 
-## Route ownership summary
+## API ownership summary
 
-| Route area | Main role | Guard requirement |
+| Resource area | Main role | Server permission requirement |
 |---|---|---|
-| `/student/*` | Student | Authenticated student session |
-| `/recruiter/*` | Recruiter | Approved recruiter session |
-| `/tpo/*` | Placement Officer | TPO or System Admin session |
-| `/admin/` | System Admin | Django admin permissions |
-| `/login` and `/logout` | All users | Session and CSRF rules |
+| `/api/me/*`, `/api/jobs/*` | Student | Authenticated student; own profile/applications only |
+| `/api/recruiter/*` | Recruiter | Approved recruiter; company ownership checked on each request |
+| `/api/tpo/*` | Placement Officer | TPO or System Admin session |
+| `/api/master/*` | All authenticated roles | Read-only active branches and skills |
+| `/admin/` | System Admin | Built-in local master-data/staff-account operations only |
+| `/api/auth/*` | All users | Explicit CSRF protection on login, registration, and logout |
+
+No student implements, styles, or tests a business interface. All business journeys above are authenticated API integration flows.
 
 [Back to README](../README.md)

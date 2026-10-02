@@ -20,7 +20,7 @@ Purpose: This document defines the required CampusHire data entities, relationsh
 | SelectionRound | Ordered selection process for a posting. |
 | Application | Student application and current state. |
 | ApplicationEvent | Timeline and audit entry for an application. |
-| Notification | Optional in-app notification. |
+| Notification | Optional API-readable notification and local e-mail delivery record. |
 
 ## Tables and columns
 
@@ -294,6 +294,12 @@ erDiagram
 | Prava Labs India | Data Operations Intern | INTERNSHIP | INR 25000 per month | CSE, ISE | 6.50 | 2026-11-12 18:00 IST |
 | Teralite Motors | Graduate Engineer Trainee | FULL_TIME | 6.25 LPA | ME, EEE | 6.75 | 2026-11-25 17:00 IST |
 
+## Local seed and persistence contract
+
+The required local seed in document 06 assigns Navira posting UUID `00000000-0000-4000-8000-000000000101` to alias `post-nav-ft-2027`. It creates the sample students/companies above, all six branches, and Python/SQL/Docker skills. Aarav has a complete `VERIFIED` profile and the recorded current PDF; no demo application exists initially. Deadlines are evaluated against the explicit local-only business clock, not silently extended on restart.
+
+Seed identifiers MUST be stable. Restart reuses existing rows and generated credentials without overwriting edits. Factories may create isolated test variants; they must not use demo data as a shared mutable test database. PostgreSQL records live in `campushire_pgdata`, and private resume bytes in `campushire_private_media`. Persistence tests compare both records and file SHA-256, not only row counts.
+
 ## Retention policy
 
 | Data | Retention |
@@ -305,7 +311,7 @@ erDiagram
 | Logs | Keep local development logs for 14 days. |
 | Query-plan evidence | Keep in student documentation until final evaluation. |
 
-Students MUST provide a manual deletion path for demo data in local development. Production-like deletion policies are not required for the MVP.
+Students MUST provide the explicitly confirmed local reset in document 06. Normal stop/start is never a deletion path. Reset affects only this project's local volumes and credentials. Production-like deletion policies are not required for the MVP.
 
 ## Migration policy
 
@@ -313,7 +319,7 @@ Students MUST provide a manual deletion path for demo data in local development.
 2. Migrations MUST be reviewed before merging.
 3. Migrations MUST not delete columns with placement data unless a backup or export exists.
 4. Data migrations MUST be reversible when practical.
-5. Seed data for fictional branches, skills, and sample companies MAY be loaded through a documented management command.
+5. `seed_local_demo` MUST load fictional branches, skills, sample accounts, companies, postings, and recorded private resumes after migrations; it is idempotent and non-destructive on restart.
 6. Students MUST not use real student or company personal data in seed files.
 
 [Back to README](../README.md)

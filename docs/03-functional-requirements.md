@@ -17,26 +17,25 @@ Purpose: This document defines exact CampusHire features, business rules, valida
 | FR-APP-02 | Application pipeline and timeline | Must | Recruiter, Student, TPO | BR-20, BR-21 |
 | FR-REC-01 | Recruiter applicant view and filters | Must | Recruiter | BR-22, BR-09 |
 | FR-JOB-01 | Job search, filters, pagination, and sorting | Must | Student | BR-23 |
-| FR-TPO-01 | TPO dashboard and SQL reports | Must | TPO | BR-24, BR-25 |
-| FR-UI-01 | React SPA and route guards | Must | All | BR-26 |
+| FR-TPO-01 | TPO JSON/CSV REST reports and SQL evidence | Must | TPO | BR-24, BR-25 |
+| FR-API-01 | Server-side API permissions and error contracts | Must | All | BR-26 |
 | FR-ADMIN-01 | Django admin master data | Must | System Admin | BR-27 |
+| FR-LOCAL-01 | Reproducible local start, fixtures, and persisted stop/start | Must | All | BR-38 |
 | FR-POLICY-01 | Dream-offer placement policy | Should | Student, TPO | BR-28 |
 | FR-REC-02 | Bulk status updates | Should | Recruiter | BR-29 |
-| FR-NOTIF-01 | E-mail, in-app notifications, and reminders | Should | All | BR-30 |
+| FR-NOTIF-01 | Local e-mail, API notifications, and reminders | Should | All | BR-30 |
 | FR-OFFER-01 | Offer acceptance deadline | Should | Student, Recruiter | BR-31 |
 | FR-AUDIT-01 | Application audit log | Should | TPO | BR-32 |
-| FR-REPORT-01 | Charts and CSV exports | Should | TPO | BR-33 |
-| FR-FEQ-01 | Advanced frontend quality tools | Should | Frontend | BR-34 |
+| FR-REPORT-01 | Filtered applicant CSV exports | Should | Recruiter, TPO | BR-33 |
+| FR-SQL-01 | Advanced SQL report consistency and query budgets | Should | TPO | BR-34 |
 | FR-SCHED-01 | Interview scheduling invites | Could | Recruiter, Student | BR-35 |
-| FR-THEME-01 | Dark mode | Could | All | BR-36 |
 | FR-RESUME-02 | Resume keyword extraction | Could | Student, Recruiter | BR-37 |
-| FR-DEPLOY-01 | Free-tier deployment | Could | Student | BR-38 |
 
 ## Must functional requirements
 
 ### FR-AUTH-01: Student account, login, logout, and CSRF session
 
-Students MUST self-register only with the college domain `sitm.example.in`. Login MUST use Django session authentication. The React SPA MUST send the CSRF token on unsafe requests. Logout MUST invalidate the server session.
+Students MUST self-register only with the college domain `sitm.example.in`. Login MUST use Django session authentication. API clients MUST retain the session/CSRF cookies and send the current CSRF token on unsafe requests. Anonymous registration and login MUST explicitly enforce CSRF. Logout MUST invalidate the server session.
 
 Priority: Must  
 Roles: Student  
@@ -46,8 +45,8 @@ Acceptance criteria:
 
 1. Given `aarav.rao@sitm.example.in`, when Aarav registers with a valid password, then the account is created with role `STUDENT` and response status `201`.
 2. Given `aarav.rao@gmail.com`, when Aarav submits registration, then the account is not created and the response is `400` with `college-email-required`.
-3. Given a logged-in student with CGPA `8.20`, when the SPA sends `PATCH /api/me/profile/` without `X-CSRFToken`, then the API returns `403 csrf-failed` and the stored CGPA stays `8.20`.
-4. Given Aarav logs out, when he opens `/student/applications`, then the SPA redirects to `/login`.
+3. Given a logged-in student with CGPA `8.20`, when the client sends `PATCH /api/me/profile/` without `X-CSRFToken`, then the API returns `403 csrf-failed` and the stored CGPA stays `8.20`.
+4. Given Aarav logs out, when he requests `/api/me/applications/` using the old cookie, then the API returns `403 authentication-required` with no application data.
 
 ### FR-AUTH-02: Recruiter approval and TPO account control
 
@@ -59,9 +58,9 @@ Linked BR IDs: BR-04, BR-05
 
 Acceptance criteria:
 
-1. Given Rohan registers for Navira Systems, when he logs in before TPO approval, then login returns `200` with `role` and `approval_status` set to `PENDING`.
-2. Given Meera approves Rohan, when Rohan logs in again, then he can open `/recruiter/company`.
-3. Given Meera rejects a recruiter with reason `Company email could not be verified`, when the recruiter logs in, then the SPA shows that exact reason.
+1. Given Rohan registers for Navira Systems, when he logs in before TPO approval, then login returns `200`, `role=RECRUITER`, and `approval_status=PENDING`; recruiter features return `403 recruiter-pending-approval`.
+2. Given Meera approves Rohan, when Rohan requests `/api/recruiter/company/` with an authenticated session, then the API returns `200` and his company stub.
+3. Given Meera rejects a recruiter with reason `Company email could not be verified`, when the recruiter logs in, then the API returns `403 recruiter-rejected` with that exact reason.
 
 ### FR-PROFILE-01: Student profile and TPO verification
 
@@ -76,7 +75,7 @@ Acceptance criteria:
 1. Given Aarav has CGPA `8.20`, branch `CSE`, graduation year `2027`, and active backlogs `0`, when he saves academics, then the profile is saved.
 2. Given CGPA `10.50`, when Aarav saves academics, then the database is unchanged and the response is `400` with `cgpa-out-of-range`.
 3. Given Aarav lacks a 12th percentage, when he tries to apply, then eligibility includes `PROFILE_INCOMPLETE`.
-4. Given Meera verifies Aarav's profile, when Aarav opens his dashboard, then profile status is `VERIFIED`.
+4. Given Meera verifies Aarav's profile, when Aarav requests `/api/me/profile/`, then profile status is `VERIFIED`.
 5. Given Aarav's verified CGPA is `8.20`, when he changes it to `9.00`, then profile status becomes `DRAFT` and a later apply request returns `403` with `profile-not-verified`.
 
 ### FR-PROFILE-02: Resume upload, storage, and authorized download
@@ -104,7 +103,7 @@ Linked BR IDs: BR-10, BR-11
 
 Acceptance criteria:
 
-1. Given Rohan registers with company `Navira Systems Pvt Ltd`, when he opens the company route after approval, then the API returns the linked company stub.
+1. Given Rohan registers with company `Navira Systems Pvt Ltd`, when he requests the company endpoint after approval, then the API returns the linked company stub.
 2. Given Rohan creates `Associate Software Engineer`, type `FULL_TIME`, CTC `8.50`, and location `Bengaluru`, then the posting is saved as `DRAFT`.
 3. Given an internship posting has no stipend, when Rohan saves it, then the draft is rejected with `400` and `stipend-required`.
 
@@ -136,7 +135,7 @@ Acceptance criteria:
 1. Given Aarav has CGPA `8.20`, branch `CSE`, year `2027`, backlogs `0`, verified profile, no application, and deadline in future, when he opens a matching posting, then the result is `Eligible`.
 2. Given Diya has CGPA `6.40`, branch `EEE`, and one backlog for a posting requiring CGPA `7.00`, branches `CSE, ISE`, and backlogs `0`, when she opens the posting, then she sees `CGPA_BELOW_MINIMUM`, `BRANCH_NOT_ALLOWED`, and `ACTIVE_BACKLOGS_EXCEEDED`.
 3. Given Aarav already applied to `NAV-FT-2027`, when he opens the same posting, then he sees `ALREADY_APPLIED`.
-4. Given a posting deadline has passed, when Aarav opens it, then he sees `DEADLINE_PASSED` and the apply button is disabled.
+4. Given a posting deadline has passed, when Aarav checks eligibility, then JSON includes `DEADLINE_PASSED`; an apply request returns `409 deadline-passed`.
 
 ### FR-APP-01: Apply and withdraw
 
@@ -148,10 +147,10 @@ Linked BR IDs: BR-17, BR-18, BR-19
 
 Acceptance criteria:
 
-1. Given Aarav is eligible for `NAV-FT-2027`, when he clicks Apply, then one application is created in state `APPLIED`.
-2. Given Aarav has an `APPLIED` application, when he clicks Withdraw, then state becomes `WITHDRAWN`.
-3. Given Aarav has a `SHORTLISTED` application, when he clicks Withdraw, then state stays `SHORTLISTED` and the response is `409` with `withdrawal-not-allowed`.
-4. Given Aarav already has an application for the posting, when he clicks Apply again, then no duplicate row is created and the response is `409` with `application-already-exists`.
+1. Given Aarav is eligible for `NAV-FT-2027`, when he sends POST apply with valid CSRF, then one application is created in state `APPLIED`.
+2. Given Aarav has an `APPLIED` application, when he sends POST withdraw, then state becomes `WITHDRAWN`.
+3. Given Aarav has a `SHORTLISTED` application, when he requests withdrawal, then state stays `SHORTLISTED` and the response is `409` with `withdrawal-not-allowed`.
+4. Given Aarav already has an application for the posting, when he repeats POST apply, then no duplicate row is created and the response is `409` with `application-already-exists`.
 
 ### FR-APP-02: Application pipeline and timeline
 
@@ -185,7 +184,7 @@ Acceptance criteria:
 
 ### FR-JOB-01: Job search, filters, pagination, and sorting
 
-Students MUST search published jobs by keyword, type, location, minimum CTC, and eligible-only toggle. Results MUST be paginated. Sorting MUST support deadline and CTC.
+Students MUST search published jobs by keyword, type, location, minimum CTC, and `eligible_only` query parameter. Results MUST be paginated. Sorting MUST support deadline and CTC.
 
 Priority: Must  
 Roles: Student  
@@ -198,9 +197,9 @@ Acceptance criteria:
 3. Given eligible-only is true, when a job returns any eligibility reason, then it is excluded.
 4. Given sort `ctc_desc`, when two jobs offer `8.50` and `6.25` LPA, then `8.50` appears first.
 
-### FR-TPO-01: TPO dashboard and SQL reports
+### FR-TPO-01: TPO JSON/CSV REST reports and SQL evidence
 
-The TPO dashboard MUST show registered students, verified students, placed percentage, accepted full-time offer count, highest CTC, average CTC, median CTC, branch-wise placement, and company-wise offers. A placed student is a distinct student with an `ACCEPTED` application for a `FULL_TIME` posting. Placed percentage is placed students divided by registered students, multiplied by 100, and rounded to 2 decimals. It is `0.00` when there are no registered students. CTC metrics use accepted full-time applications only. Median for an even count is the mean of the two middle values. The branch-wise report MUST use handwritten SQL with a dense rank by accepted offers in each branch.
+The TPO MUST obtain registered students, verified students, placed percentage, accepted full-time offer count, highest CTC, average CTC, median CTC, branch-wise placement, and company-wise offers through `/api/tpo/reports/summary/`, `/api/tpo/reports/branch-report/`, and `/api/tpo/reports/company-report/`. All three MUST support JSON and `?format=csv` with the exact schemas and ordering in document 08. A placed student is a distinct student with an `ACCEPTED` application for a `FULL_TIME` posting. Placed percentage is placed students divided by registered students, multiplied by 100, and rounded to 2 decimals. It is `0.00` when there are no registered students. CTC metrics use accepted full-time applications only. Median for an even count is the mean of the two middle values. The branch-wise report MUST use handwritten SQL with a dense rank by accepted offers in each branch.
 
 Priority: Must  
 Roles: Placement Officer  
@@ -208,14 +207,14 @@ Linked BR IDs: BR-24, BR-25
 
 Acceptance criteria:
 
-1. Given 100 registered students and 72 verified students, when Meera opens the dashboard, then the dashboard shows those exact counts.
+1. Given 100 registered students and 72 verified students, when Meera requests the summary as JSON and CSV, then both return those exact counts.
 2. Given accepted full-time CTC values `6.00`, `8.00`, and `10.00`, when metrics calculate, then average CTC is `8.00` LPA and median CTC is `8.00` LPA.
 3. Given CSE has accepted full-time offers from Navira and Prava Labs, when branch-wise report runs, then companies are dense-ranked by accepted offer count within CSE.
-4. Given no accepted offers exist, when Meera opens the dashboard, then CTC fields show `No offers yet` instead of zero.
+4. Given no accepted offers exist, when Meera requests the summary, then JSON CTC fields are `null` and CSV CTC cells are empty; zero registered students gives placed percentage `0.00`.
 
-### FR-UI-01: React SPA and route guards
+### FR-API-01: Server-side API permissions and error contracts
 
-The frontend MUST use React 19, TypeScript, Vite, React Router, React Hook Form, and Tailwind CSS. It MUST include a typed API client, responsive layouts from 360 px width, role navigation, route guards, loading states, and error states.
+Every protected endpoint MUST enforce role and object ownership on the server. API users receive the error envelope in document 08, not redirects. The OpenAPI schema MUST describe permissions, request types, successful responses, and errors. Clients are Python tests or an API client; no custom interface is required or permitted.
 
 Priority: Must  
 Roles: All  
@@ -223,14 +222,14 @@ Linked BR IDs: BR-26
 
 Acceptance criteria:
 
-1. Given a student session, when Aarav opens `/recruiter/postings`, then the SPA shows `You do not have access to this page`.
-2. Given a slow job search request, when results are loading, then the page shows a loading indicator before data appears.
-3. Given API returns `403 authentication-required`, when the typed client receives it, then the SPA redirects to `/login`; for other `403` keys it shows the server message and keeps the current safe route.
-4. Given viewport width is 360 px, when Aarav opens job search, then filters and cards remain usable without horizontal scrolling.
+1. Given a student session, when Aarav requests `/api/recruiter/postings/`, then the API returns `403 role-not-allowed` without recruiter data.
+2. Given no published jobs match `q=unmatched`, when Aarav searches, then the API returns `200`, `count=0`, and `results=[]`.
+3. Given an expired session, when a protected endpoint is requested, then it returns `403 authentication-required` with no `Location` redirect; ownership failures keep their distinct error keys.
+4. Given a generated OpenAPI schema, when request/response fixtures are compared with it, then fields, decimal strings, pagination, and documented error statuses match.
 
 ### FR-ADMIN-01: Django admin master data
 
-The System Admin MUST manage branches, skills, college settings, TPO accounts, and recruiter approvals through Django admin where suitable.
+The System Admin MUST use the built-in local Django admin for branches, skills, college settings, and staff accounts. Business approvals and application transitions MUST use the authorized REST services, including when an admin invokes them. No custom admin interface is built.
 
 Priority: Must  
 Roles: System Admin  
@@ -242,30 +241,41 @@ Acceptance criteria:
 2. Given Kavya changes college e-mail domain to `sitm.example.in`, when a student registers with another domain, then registration fails.
 3. Given Kavya disables skill `Blockchain`, when a student edits skills, then `Blockchain` cannot be newly selected.
 
+### FR-LOCAL-01: Reproducible local start, fixtures, and persisted stop/start
+
+The student MUST implement the start, stop, and explicitly confirmed reset entry points in document 06. Startup initializes PostgreSQL migrations, fictional seed data, and private resume fixtures. After initial downloads, the default local profile MUST require no internet, external API, paid account, or public hostname.
+
+Priority: Must. Roles: All. Linked BR IDs: BR-38.
+
+Acceptance criteria:
+
+1. Given a clean implementation clone and cached dependencies/images, when `sh scripts/local-start.sh --profile lite` runs, then both documented health checks pass and seeded Aarav can authenticate.
+2. Given the local demo clock and seed, when Aarav requests Navira eligibility without external network access, then the API returns `200`, `label=Eligible`, `reason_ids=[]`, and `messages=[]`.
+3. Given Aarav creates an application and uploads the recorded PDF, when stop then start runs, then the same application ID, timeline count, and PDF SHA-256 remain.
+4. Given PostgreSQL is unavailable or port `8000` is occupied, when startup is attempted, then it exits nonzero with the specific local dependency/port diagnostic and deletes no data.
+
 ## Should and Could functional requirements
 
 | ID | Requirement | Acceptance criteria summary |
 |---|---|---|
 | FR-POLICY-01 | The dream-offer policy SHOULD be configurable by TPO. After one accepted full-time offer, new full-time applications are allowed only when CTC is at least 1.5 × accepted CTC. Internship offers do not block at that stage. The student can accept at most 2 full-time offers. The second accepted full-time offer withdraws all other active applications in one transaction. After the second accepted full-time offer, every new application fails with `403 policy-limit-reached`, including full-time, internship, and internship-with-PPO postings. | Block a `9.00` LPA full-time application after a `7.00` LPA accepted offer; allow `10.50` LPA; withdraw active applications after the second accepted full-time offer; block the next full-time, internship, and internship-with-PPO applications. |
 | FR-REC-02 | Recruiters SHOULD update many applications from `APPLIED` to `SHORTLISTED` in one reviewed action. | Bulk change 12 selected applications; reject mixed-company selections. |
-| FR-NOTIF-01 | The system SHOULD send in-app and e-mail notifications for approval, shortlisting, offers, rejection, withdrawal, and deadline reminders. Delivery is at least once with de-duplication. | One notification with key `deadline:NAV-FT-2027:Aarav` exists after retry. |
+| FR-NOTIF-01 | The system SHOULD store API-readable notifications and send local e-mail through Mailpit for approval, shortlisting, offers, rejection, withdrawal, and deadline reminders. Delivery is at least once with de-duplication. | One notification with key `deadline:NAV-FT-2027:Aarav` exists after retry. |
 | FR-OFFER-01 | Offers SHOULD have a 7-day acceptance deadline. Expired offers SHOULD move to `DECLINED` with reason `offer-expired`. | Offer made on 1 Nov expires after 8 Nov 00:00 IST if not accepted. |
 | FR-AUDIT-01 | The system SHOULD keep an audit log for application status changes. | TPO sees actor, old state, new state, timestamp, and reason. |
-| FR-REPORT-01 | Dashboard SHOULD add Recharts charts and CSV exports for dashboard and applicants. | CSV includes headers and current filtered rows. |
-| FR-FEQ-01 | Frontend SHOULD use TanStack Query, Zod, TypeScript strict mode, Playwright in CI, and axe checks. | CI fails for a TypeScript strict error. |
+| FR-REPORT-01 | Recruiter and TPO applicant endpoints SHOULD support filtered CSV exports with the same permissions as JSON lists. TPO placement report CSV is already Must under FR-TPO-01. | `branch=CSE` excludes ECE applicants; CSV omits storage keys and private resume bytes. |
+| FR-SQL-01 | Reports SHOULD include SQL query-count and tie-ranking regression checks. | Summary and branch report each use at most 5 SQL queries for 5,000 applications; tied company offer counts receive the same dense rank. |
 | FR-SCHED-01 | Interview scheduling MAY create `.ics` invites. | Student downloads an invite for an interview slot. |
-| FR-THEME-01 | Dark mode MAY be available. | User choice persists across reload. |
 | FR-RESUME-02 | Resume keyword extraction MAY suggest simple keywords. | Recruiter sees extracted keywords after upload. |
-| FR-DEPLOY-01 | Free-tier deployment MAY be documented with cost warnings. | Demo instructions include destroy-after-demo steps. |
 
 ## Business rules
 
 | ID | Exact rule | Exact values | Used by |
 |---|---|---|---|
 | BR-01 | Student e-mail MUST end with the configured college domain. | Default domain: `sitm.example.in`. | FR-AUTH-01 |
-| BR-02 | Session cookie rules MUST protect same-site SPA sessions. | `HttpOnly=true`, `Secure=true` outside local HTTP, `SameSite=Lax`, idle lifetime `8 hours`, absolute lifetime `14 days`. | FR-AUTH-01 |
+| BR-02 | Session cookies MUST protect authenticated API sessions. | `HttpOnly=true`, `Secure=true` outside local HTTP, `SameSite=Lax`, idle lifetime `8 hours`, absolute lifetime `14 days`. | FR-AUTH-01 |
 | BR-03 | Unsafe API requests MUST include CSRF header. | Header `X-CSRFToken`; cookie name `csrftoken`; methods `POST`, `PUT`, `PATCH`, `DELETE`. | FR-AUTH-01 |
-| BR-04 | Recruiters can log in while pending, but cannot access recruiter feature routes until approved. | Statuses: `PENDING`, `APPROVED`, `REJECTED`; pending feature access returns `403 recruiter-pending-approval`. | FR-AUTH-02 |
+| BR-04 | Recruiters can log in while pending, but cannot access recruiter feature endpoints until approved. | Statuses: `PENDING`, `APPROVED`, `REJECTED`; pending feature access returns `403 recruiter-pending-approval`; rejected login returns `403 recruiter-rejected` with the TPO reason. | FR-AUTH-02 |
 | BR-05 | TPO accounts are not self-service. | Created by System Admin only. | FR-AUTH-02 |
 | BR-06 | Required student profile fields MUST be present before submit, verification, and applying. | Name, roll number, branch, graduation year, CGPA, active backlogs, 10th %, 12th %, skills, resume, phone. Draft profiles MAY leave them empty. | FR-PROFILE-01 |
 | BR-07 | TPO verification is required before applying. | Profile states: `DRAFT`, `SUBMITTED`, `VERIFIED`, `REJECTED`. Changing any BR-06 field or current resume on a verified profile resets it to `DRAFT` and clears verifier and time. | FR-PROFILE-01 |
@@ -285,21 +295,20 @@ Acceptance criteria:
 | BR-21 | Recruiter updates one application per request in MUST scope. | Bulk update is Should only. | FR-APP-02 |
 | BR-22 | Recruiters see only their own postings. | Company ownership is checked on every applicant query. | FR-REC-01 |
 | BR-23 | Job list pagination has bounded page size. | Default `10`, maximum `50`; sort values `deadline_asc`, `deadline_desc`, `ctc_asc`, `ctc_desc`. | FR-JOB-01 |
-| BR-24 | Dashboard placement and CTC metrics use accepted full-time offers only. | Placed student is a distinct student with an accepted full-time application. Accepted offer count counts accepted full-time applications. Placed percentage is placed students ÷ registered students × 100, rounded to 2 decimals. Internship stipend is excluded. | FR-TPO-01 |
+| BR-24 | Placement and CTC reports use accepted full-time offers only. | Placed student is a distinct student with an accepted full-time application. Accepted offer count counts accepted full-time applications. CTC uses `Application.offer_ctc_lpa`, not advertised posting CTC. Placed percentage is placed students ÷ registered students × 100, rounded to 2 decimals; zero denominator gives `0.00`. Internship stipend and PPO offers are excluded. | FR-TPO-01 |
 | BR-25 | SQL report requires query-plan evidence. | Save `EXPLAIN ANALYZE` notes for branch-wise and job-search queries. | FR-TPO-01 |
-| BR-26 | SPA routes are role-guarded. | Student, recruiter, TPO, and admin route groups. | FR-UI-01 |
+| BR-26 | API roles and object ownership are checked server-side. | Student owns profile/application; recruiter owns company/posting; TPO and ADMIN may use TPO endpoints. Wrong role returns `403 role-not-allowed`; missing session returns `403 authentication-required`; no redirects. | FR-API-01 |
 | BR-27 | Admin master data controls branch and skill choices. | Branch codes: `CSE`, `ISE`, `ECE`, `EEE`, `ME`, `CV`. | FR-ADMIN-01 |
 | BR-28 | Dream-offer policy uses accepted full-time offers only. | Threshold `1.5 × highest accepted full-time CTC`; max accepted full-time offers `2`; active states are `APPLIED`, `SHORTLISTED`, `IN_INTERVIEW`, and `OFFERED`; second acceptance uses `policy_withdraw` for other active applications. | FR-POLICY-01 |
 | BR-29 | Bulk status update cannot cross company ownership. | All selected applications must belong to recruiter's company. | FR-REC-02 |
 | BR-30 | Notification delivery is at least once. | De-dup key per event and recipient. | FR-NOTIF-01 |
 | BR-31 | Offer acceptance expires after 7 calendar days. | Expiry at `offer_made_at + 7 days`. | FR-OFFER-01 |
 | BR-32 | Audit log is append-only for status changes. | Actor, action, old state, new state, reason, timestamp. | FR-AUDIT-01 |
-| BR-33 | CSV exports include active filters. | UTF-8 CSV with header row. | FR-REPORT-01 |
-| BR-34 | Frontend quality tools are configured when selected. | TypeScript strict, Zod schemas, TanStack Query, Playwright CI, axe checks. | FR-FEQ-01 |
+| BR-33 | CSV exports include active filters and enforce authorization. | UTF-8 CSV with header row; no resume bytes, storage keys, or session tokens. | FR-REPORT-01 |
+| BR-34 | Advanced SQL checks preserve report semantics as data grows. | Maximum 5 queries per summary/branch request; dense rank ties are consecutive without gaps. | FR-SQL-01 |
 | BR-35 | Interview invite times use Asia/Kolkata. | `.ics` times include timezone or UTC conversion. | FR-SCHED-01 |
-| BR-36 | Theme choice is user-specific. | Values: `light`, `dark`, `system`. | FR-THEME-01 |
 | BR-37 | Resume keywords are suggestions, not eligibility criteria. | Max 20 keywords per resume. | FR-RESUME-02 |
-| BR-38 | Cloud deployment is optional and cost-aware. | Include cost warning and destroy-after-demo instruction. | FR-DEPLOY-01 |
+| BR-38 | Local lifecycle commands MUST preserve data and use loopback bindings. | Fixed ports and named volumes in document 06; stop never deletes volumes; reset requires `--confirm-delete-local-data`; cached local runtime needs no external network. | FR-LOCAL-01 |
 
 ## Eligibility engine
 
@@ -399,13 +408,14 @@ stateDiagram-v2
 | Condition | System response | User-visible message or status |
 |---|---|---|
 | Missing CSRF header on unsafe request | Return `403`; do not change data | Your session security token is missing. Refresh and try again. |
-| Expired or missing session on protected API | Return `403` with `authentication-required`; SPA redirects to login | Your session expired. Please log in again. |
+| Expired or missing session on protected API | Return `403` with `authentication-required`; no redirect | Your session expired. Please log in again. |
 | Recruiter pending approval | Return `403` | Your recruiter account is waiting for TPO approval. |
 | Posting deadline passed during apply | Set posting `CLOSED` if needed; return `409` | The application deadline has passed. |
 | Duplicate application | Return `409`; keep existing row | You have already applied to this posting. |
 | Unauthorized resume download | Return `403`; do not reveal file path | You are not allowed to download this resume. |
 | Invalid pipeline transition | Return `409`; record no timeline event | This status change is not allowed. |
-| Dashboard query timeout | Return `503` for dashboard panel | This report is taking too long. Try again later. |
+| Report query timeout | Return `503 report-timeout` for that report endpoint | This report is taking too long. Try again later. |
 | File storage unavailable | Return `503`; keep old resume | Resume upload is temporarily unavailable. |
+| PostgreSQL unavailable | Return `503 database-unavailable`; no partial state or timeline write | The local PostgreSQL service is unavailable. |
 
 [Back to README](../README.md)
